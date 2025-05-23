@@ -1,6 +1,7 @@
 package com.shareApp.Utils.advices;
 
 import org.springframework.core.MethodParameter;
+import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
@@ -15,7 +16,9 @@ public class GlobalResponseHandler implements ResponseBodyAdvice<Object> {
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
-        return true;
+        return !(returnType.getParameterType().equals(Resource.class)
+                || returnType.getParameterType().getName().startsWith("org.springframework.http.ResponseEntity")
+                && returnType.getGenericParameterType().getTypeName().contains("Resource"));
     }
 
     @Override
