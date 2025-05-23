@@ -30,6 +30,9 @@ public class User implements UserDetails {
     private String password;
     private Set<Role> roles;
 
+    private boolean paymentCompleted;
+    private String stripePaymentId;
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()

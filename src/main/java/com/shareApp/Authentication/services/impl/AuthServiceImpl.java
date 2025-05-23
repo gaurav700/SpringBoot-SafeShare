@@ -61,8 +61,8 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String refreshToken(String refreshToken) {
-        Long userId = jwtService.getUserIdFromToken(refreshToken);
-        User user = userRepository.findById(String.valueOf(userId)).orElseThrow(()->
+        String userId = jwtService.getUserIdFromToken(refreshToken);
+        User user = userRepository.findById(userId).orElseThrow(()->
                 new ResourceNotFoundException("User not found with this id :"+userId));
         return jwtService.generateAccessToken(user);
     }
