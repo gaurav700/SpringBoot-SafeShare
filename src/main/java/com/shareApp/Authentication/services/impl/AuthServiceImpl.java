@@ -1,6 +1,7 @@
 package com.shareApp.Authentication.services.impl;
 
 
+import com.shareApp.Authentication.dto.CheckUserDTO;
 import com.shareApp.Authentication.dto.SignUpDTO;
 import com.shareApp.Authentication.dto.UserDTO;
 import com.shareApp.Authentication.entities.User;
@@ -19,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -66,4 +68,11 @@ public class AuthServiceImpl implements AuthService {
                 new ResourceNotFoundException("User not found with this id :"+userId));
         return jwtService.generateAccessToken(user);
     }
+
+    @Override
+    public Boolean checkUser(CheckUserDTO checkUserDTO) {
+        Optional<User> user = userRepository.findByEmail((checkUserDTO.getEmail()));
+        return user.isPresent();
+    }
+
 }

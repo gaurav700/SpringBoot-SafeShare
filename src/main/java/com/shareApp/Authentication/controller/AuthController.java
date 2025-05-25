@@ -1,10 +1,7 @@
 package com.shareApp.Authentication.controller;
 
 
-import com.shareApp.Authentication.dto.LoginRequestDTO;
-import com.shareApp.Authentication.dto.LoginResponseDTO;
-import com.shareApp.Authentication.dto.SignUpDTO;
-import com.shareApp.Authentication.dto.UserDTO;
+import com.shareApp.Authentication.dto.*;
 import com.shareApp.Authentication.services.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +13,8 @@ import org.springframework.security.authentication.AuthenticationServiceExceptio
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -23,6 +22,13 @@ import java.util.Arrays;
 public class AuthController {
 
     private final AuthService authService;
+
+    @PostMapping("/check-user")
+    public ResponseEntity<Boolean> checkUser(@RequestBody CheckUserDTO checkUserDTO) {
+        boolean exists = authService.checkUser(checkUserDTO);
+        return ResponseEntity.ok(exists);
+    }
+
 
     @PostMapping("/signUp")
     ResponseEntity<UserDTO> signUp(@RequestBody SignUpDTO sign){
