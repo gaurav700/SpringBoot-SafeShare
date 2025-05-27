@@ -11,6 +11,4 @@ public interface AuthService {
     UserDTO signUp(SignUpDTO signUpDTO);
 
     String refreshToken(String refreshToken);
-
-    Boolean checkUser(CheckUserDTO checkUserDTO);
 }

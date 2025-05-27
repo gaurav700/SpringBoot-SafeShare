@@ -120,13 +120,4 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Invalid refresh token");
         }
     }
-
-    @Override
-    public Boolean checkUser(CheckUserDTO checkUserDTO) {
-        String email = checkUserDTO.getEmail().toLowerCase().trim();
-        boolean exists = userRepository.existsByEmail(email);
-
-        log.info("User check for email: {} - exists: {}", email, exists);
-        return exists;
-    }
 }

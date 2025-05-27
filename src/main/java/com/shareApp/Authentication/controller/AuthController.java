@@ -3,16 +3,23 @@ package com.shareApp.Authentication.controller;
 
 import com.shareApp.Authentication.dto.*;
 import com.shareApp.Authentication.entities.OTP;
+import com.shareApp.Authentication.entities.User;
+import com.shareApp.Authentication.repositories.UserRepository;
 import com.shareApp.Authentication.services.AuthService;
 import com.shareApp.Authentication.services.OTPService;
 import com.shareApp.Utils.advices.ApiError;
 import com.shareApp.Utils.advices.ApiResponse;
+import com.shareApp.Utils.exceptions.ResourceNotFoundException;
+import com.shareApp.Utils.security.JWTService;
+
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationServiceException;
@@ -29,12 +36,38 @@ public class AuthController {
 
     private final AuthService authService;
     private final OTPService otpService;
+    private final JWTService jwtService;
+    private final UserRepository userRepository;
+    private final ModelMapper modelMapper;
 
-    @PostMapping("/check-user")
-    public ResponseEntity<Boolean> checkUser(@Valid @RequestBody CheckUserDTO checkUserDTO) {
-        boolean exists = authService.checkUser(checkUserDTO);
-        return ResponseEntity.ok(exists);
+
+    @GetMapping("/check-user")
+    public ResponseEntity<ApiResponse<UserDTO>> checkUser(@RequestHeader("Authorization") String authHeader) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                throw new IllegalArgumentException("Invalid Authorization header");
+            }
+
+            String token = authHeader.substring(7);
+            String userId = jwtService.getUserIdFromToken(token);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+
+            UserDTO userDTO = modelMapper.map(user, UserDTO.class);
+            ApiResponse<UserDTO> response = new ApiResponse<>(userDTO);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("User check failed", e);
+            ApiError apiError = ApiError.builder()
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .message(e.getMessage())
+                    .build();
+            ApiResponse<UserDTO> response = new ApiResponse<>(apiError);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
     }
+
 
     @PostMapping("/send-otp")
     public ResponseEntity<ApiResponse<Map<String, String>>> sendOTP(@Valid @RequestBody SendOTPRequestDTO request) {
