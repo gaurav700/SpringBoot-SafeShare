@@ -40,8 +40,13 @@ public class AuthController {
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
 
+    @PostMapping("/check-user")
+    public ResponseEntity<Boolean> checkUser(@Valid @RequestBody CheckUserDTO checkUserDTO) {
+        boolean exists = authService.checkUser(checkUserDTO);
+        return ResponseEntity.ok(exists);
+    }
 
-    @GetMapping("/check-user")
+    @GetMapping("/get-user-detail")
     public ResponseEntity<ApiResponse<UserDTO>> checkUser(@RequestHeader("Authorization") String authHeader) {
         try {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
