@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
@@ -16,8 +17,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+
 @Configuration
 @RequiredArgsConstructor
+@Slf4j
 public class JWTAuthFilter extends OncePerRequestFilter {
     private final JWTService jwtService;
     private final UserService userService;
@@ -26,10 +29,30 @@ public class JWTAuthFilter extends OncePerRequestFilter {
     @Qualifier("handlerExceptionResolver")
     private HandlerExceptionResolver handlerExceptionResolver;
 
+    // Paths that should skip JWT authentication
+    private static final String[] PUBLIC_PATHS = {
+            "/auth/",
+            "/api/webhooks/",
+            "/payment/success",
+            "/payment/cancel"
+    };
+
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
 
         try {
+            String requestPath = request.getRequestURI();
+
+            // Skip JWT validation for public paths (especially webhooks)
+            for (String publicPath : PUBLIC_PATHS) {
+                if (requestPath.startsWith(publicPath)) {
+                    log.debug("Skipping JWT validation for public path: {}", requestPath);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+            }
+
             final String requestTokenHeader = request.getHeader("Authorization");
             if (requestTokenHeader == null || !requestTokenHeader.startsWith("Bearer")) {
                 filterChain.doFilter(request, response);

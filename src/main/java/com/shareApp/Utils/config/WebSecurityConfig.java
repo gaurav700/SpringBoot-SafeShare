@@ -25,7 +25,14 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableMethodSecurity(securedEnabled = true)
 public class WebSecurityConfig {
     private final JWTAuthFilter jwtAuthFilter;
-    private static final String[] PUBLIC_ROUTES = { "/auth/**" };
+
+    // Add webhook routes to public routes
+    private static final String[] PUBLIC_ROUTES = {
+            "/auth/**",
+            "/api/webhooks/**",    // Allow webhook endpoints
+            "/payment/success",    // Allow payment success page
+            "/payment/cancel"      // Allow payment cancel page
+    };
 
     @Value("${app.frontend.url}")
     private String API_FRONTEND_URL;
@@ -35,7 +42,9 @@ public class WebSecurityConfig {
         httpSecurity
                 .sessionManagement(sessionConfig -> sessionConfig
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .csrf(csrfConfig -> csrfConfig.disable())
+                .csrf(csrfConfig -> csrfConfig
+                        .ignoringRequestMatchers("/api/webhooks/**") // Disable CSRF for webhooks
+                        .disable())
                 .cors(corsConfig -> corsConfig.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ROUTES).permitAll()

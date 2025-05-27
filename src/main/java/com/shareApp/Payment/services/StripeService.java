@@ -1,22 +1,25 @@
 package com.shareApp.Payment.services;
 
-import com.shareApp.Payment.dto.PaymentRequestDTO;
 import com.shareApp.Payment.dto.StripeResponseDTO;
 import com.shareApp.Payment.entitites.Payment;
 import com.shareApp.Payment.repositories.PaymentRepository;
+import com.shareApp.Payment.services.PaymentInformationService;
 import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class StripeService {
 
     @Value("${stripe.secret.key}")
@@ -25,29 +28,36 @@ public class StripeService {
     @Value("${app.base.url:http://localhost:8080}")
     private String baseUrl;
 
-    // Option 1: Increase price per GB to meet minimum
-    private static final BigDecimal PRICE_PER_GB = new BigDecimal("0.10"); // $0.10 per GB
-
-    // Option 2: Set minimum charge amount
+    // Minimum charge amount required by Stripe
     private static final BigDecimal MINIMUM_CHARGE = new BigDecimal("0.50"); // $0.50 minimum
 
     private final PaymentRepository paymentRepository;
+    private final PaymentInformationService paymentInformationService;
 
-    public StripeService(PaymentRepository paymentRepository) {
-        this.paymentRepository = paymentRepository;
-    }
-
-    public StripeResponseDTO checkoutProducts(String userId, PaymentRequestDTO paymentRequest) {
+    public StripeResponseDTO checkoutMonthlyStorageCost(String userId, Integer month, Integer year) {
         try {
-            // Calculate base amount
-            BigDecimal baseAmount = PRICE_PER_GB.multiply(new BigDecimal(paymentRequest.getStorageGb()));
+            // Default to current month if not specified
+            LocalDate now = LocalDate.now();
+            int targetMonth = month != null ? month : now.getMonthValue();
+            int targetYear = year != null ? year : now.getYear();
 
-            // Apply minimum charge if necessary
-            BigDecimal totalAmount = baseAmount.max(MINIMUM_CHARGE);
+            // Get monthly storage cost from PaymentInformationService
+            double monthlyStorageCost = paymentInformationService.calculateMonthlyStorageCost(userId, targetMonth, targetYear);
+            BigDecimal totalAmount = new BigDecimal(monthlyStorageCost).setScale(2, RoundingMode.HALF_UP);
+
+            // Apply minimum charge if necessary (Stripe requirement)
+            if (totalAmount.compareTo(MINIMUM_CHARGE) < 0) {
+                log.info("Monthly cost ${} is below minimum, applying minimum charge of ${}", totalAmount, MINIMUM_CHARGE);
+                totalAmount = MINIMUM_CHARGE;
+            }
+
+            // Get current storage for display
+            long currentStorageBytes = paymentInformationService.calculateTotalUserStorage(userId);
+            double currentStorageMB = currentStorageBytes / (1024.0 * 1024.0);
 
             // Log the calculation for debugging
-            log.info("Storage: {}GB, Base amount: ${}, Final amount: ${}",
-                    paymentRequest.getStorageGb(), baseAmount, totalAmount);
+            log.info("User: {}, Month: {}/{}, Storage Cost: ${}, Current Storage: {:.2f}MB",
+                    userId, targetMonth, targetYear, totalAmount, currentStorageMB);
 
             // Convert to cents for Stripe (round to avoid precision issues)
             Long amountInCents = totalAmount.multiply(new BigDecimal("100"))
@@ -67,14 +77,15 @@ public class StripeService {
             // Create product data
             SessionCreateParams.LineItem.PriceData.ProductData productData =
                     SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                            .setName("Cloud Storage - " + paymentRequest.getStorageGb() + "GB")
-                            .setDescription("Premium cloud storage subscription")
+                            .setName(String.format("Cloud Storage Bill - %s %d",
+                                    LocalDate.of(targetYear, targetMonth, 1).getMonth().toString(), targetYear))
+                            .setDescription(String.format("Monthly storage usage bill (%.2f MB used)", currentStorageMB))
                             .build();
 
             // Create price data
             SessionCreateParams.LineItem.PriceData priceData =
                     SessionCreateParams.LineItem.PriceData.builder()
-                            .setCurrency(paymentRequest.getCurrency().toLowerCase())
+                            .setCurrency("usd") // Default to USD
                             .setUnitAmount(amountInCents)
                             .setProductData(productData)
                             .build();
@@ -89,13 +100,14 @@ public class StripeService {
             // Create session parameters
             SessionCreateParams params = SessionCreateParams.builder()
                     .setMode(SessionCreateParams.Mode.PAYMENT)
-                    .setSuccessUrl(paymentRequest.getSuccessUrl() != null ?
-                            paymentRequest.getSuccessUrl() : baseUrl + "/success?session_id={CHECKOUT_SESSION_ID}")
-                    .setCancelUrl(paymentRequest.getCancelUrl() != null ?
-                            paymentRequest.getCancelUrl() : baseUrl + "/cancel")
+                    .setSuccessUrl(baseUrl + "/payment/success?session_id={CHECKOUT_SESSION_ID}")
+                    .setCancelUrl(baseUrl + "/payment/cancel")
                     .addLineItem(lineItem)
                     .putMetadata("userId", userId)
-                    .putMetadata("storageGb", paymentRequest.getStorageGb().toString())
+                    .putMetadata("month", String.valueOf(targetMonth))
+                    .putMetadata("year", String.valueOf(targetYear))
+                    .putMetadata("storageBytes", String.valueOf(currentStorageBytes))
+                    .putMetadata("originalCost", String.valueOf(monthlyStorageCost))
                     .build();
 
             // Create Stripe session
@@ -105,9 +117,9 @@ public class StripeService {
             Payment payment = Payment.builder()
                     .userId(userId)
                     .stripeSessionId(session.getId())
-                    .storageGb(paymentRequest.getStorageGb())
+                    .storageGb((long) Math.ceil(currentStorageBytes / (1024.0 * 1024.0 * 1024.0))) // Convert to GB
                     .amount(totalAmount)
-                    .currency(paymentRequest.getCurrency())
+                    .currency("USD")
                     .status(Payment.PaymentStatus.PENDING)
                     .build();
 
@@ -117,7 +129,7 @@ public class StripeService {
 
             return StripeResponseDTO.builder()
                     .status("SUCCESS")
-                    .message("Payment session created successfully")
+                    .message("Monthly storage bill checkout session created successfully")
                     .sessionId(session.getId())
                     .sessionUrl(session.getUrl())
                     .build();
@@ -128,6 +140,9 @@ public class StripeService {
         } catch (IllegalArgumentException e) {
             log.error("Invalid payment amount: {}", e.getMessage());
             throw new RuntimeException("Invalid payment amount: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error during checkout: {}", e.getMessage(), e);
+            throw new RuntimeException("Checkout failed: " + e.getMessage());
         }
     }
 
@@ -139,5 +154,10 @@ public class StripeService {
                     paymentRepository.save(payment);
                     log.info("Payment status updated for session: {} to: {}", sessionId, status);
                 });
+    }
+
+    // Get payment by session ID
+    public Payment getPaymentBySessionId(String sessionId) {
+        return paymentRepository.findByStripeSessionId(sessionId).orElse(null);
     }
 }
