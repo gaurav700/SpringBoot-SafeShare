@@ -130,4 +130,18 @@ public class AuthServiceImpl implements AuthService {
         return exists;
     }
 
+    @Override
+    public UserDTO getUserDetails(String authHeader) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                throw new IllegalArgumentException("Invalid Authorization header");
+            }
+
+            String token = authHeader.substring(7);
+            String userId = jwtService.getUserIdFromToken(token);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+
+        return modelMapper.map(user, UserDTO.class);
+    }
+
 }

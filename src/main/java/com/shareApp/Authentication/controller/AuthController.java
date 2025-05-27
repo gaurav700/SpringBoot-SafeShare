@@ -47,30 +47,9 @@ public class AuthController {
     }
 
     @GetMapping("/get-user-detail")
-    public ResponseEntity<ApiResponse<UserDTO>> checkUser(@RequestHeader("Authorization") String authHeader) {
-        try {
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                throw new IllegalArgumentException("Invalid Authorization header");
-            }
-
-            String token = authHeader.substring(7);
-            String userId = jwtService.getUserIdFromToken(token);
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
-
-            UserDTO userDTO = modelMapper.map(user, UserDTO.class);
-            ApiResponse<UserDTO> response = new ApiResponse<>(userDTO);
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            log.error("User check failed", e);
-            ApiError apiError = ApiError.builder()
-                    .status(HttpStatus.UNAUTHORIZED)
-                    .message(e.getMessage())
-                    .build();
-            ApiResponse<UserDTO> response = new ApiResponse<>(apiError);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-        }
+    public ResponseEntity<UserDTO> getUserDetails(@RequestHeader("Authorization") String authHeader) {
+        UserDTO userDTO = authService.getUserDetails(authHeader);
+        return ResponseEntity.ok(userDTO);
     }
 
 

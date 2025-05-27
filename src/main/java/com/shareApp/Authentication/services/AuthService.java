@@ -14,4 +14,5 @@ public interface AuthService {
     
     Boolean checkUser(CheckUserDTO checkUserDTO);
 
+    UserDTO getUserDetails(String authHeader);
 }
